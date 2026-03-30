@@ -1,4 +1,4 @@
-import news_scraper
+import scraper
 from datetime import datetime, time, timedelta
 
 if __name__ == '__main__':
@@ -19,4 +19,4 @@ if __name__ == '__main__':
     print("3. Month")
     date = time_periods[int(input())]
 
-    news_scraper.get_news(news_source, date)
+    scraper.get_news(news_source, date)
