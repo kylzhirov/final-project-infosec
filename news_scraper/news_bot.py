@@ -5,7 +5,7 @@ import os
 import re
 import time
 import urllib.request
-import xml.etree.ElementTree as ET
+import xml.etree.ElementTree as XmlElementTree
 from datetime import datetime, timezone
 from email.utils import parsedate_to_datetime
 from html import unescape
@@ -52,7 +52,7 @@ def strip_html(text: str) -> str:
 def fetch_rss(url: str, max_items: int = 10) -> List[Dict[str, str]]:
     stories: List[Dict[str, str]] = []
     raw = fetch_url(url)
-    root = ET.fromstring(raw)
+    root = XmlElementTree.fromstring(raw)
 
     items = root.findall(".//item")
     if not items:
@@ -88,7 +88,7 @@ def fetch_rss(url: str, max_items: int = 10) -> List[Dict[str, str]]:
 
 
 def story_hash(title: str) -> str:
-    clean = re.sub(r"[^a-z0-9 ]", "", title.lower().strip())
+    clean = "".join(c for c in title.lower().strip() if c.isalnum() or c == " ")
     return hashlib.md5(clean[:80].encode("utf-8")).hexdigest()[:12]
 
 
