@@ -9,11 +9,10 @@ import xml.etree.ElementTree as ET
 from datetime import datetime, timezone
 from email.utils import parsedate_to_datetime
 from html import unescape
+from html.parser import HTMLParser
 from typing import Any, Dict, List, Optional
 
-
 USER_AGENT = "Mozilla/5.0 (compatible; NewsBot/1.0)"
-
 
 def load_json(path: str, default: Any) -> Any:
     if not os.path.exists(path):
@@ -33,8 +32,21 @@ def fetch_url(url: str, timeout: int = 12) -> bytes:
         return resp.read()
 
 
+class HTMLTextExtractor(HTMLParser):
+    def __init__(self):
+        super().__init__()
+        self.text_parts = []
+
+    def handle_data(self, data: str) -> None:
+        self.text_parts.append(data)
+
+
 def strip_html(text: str) -> str:
-    return re.sub(r"<[^>]+>", "", unescape(text or "")).strip()
+    if not text:
+        return ""
+    parser = HTMLTextExtractor()
+    parser.feed(unescape(text))
+    return "".join(parser.text_parts).strip()
 
 
 def fetch_rss(url: str, max_items: int = 10) -> List[Dict[str, str]]:
@@ -116,21 +128,30 @@ def is_fresh(pub_date_str: str, max_hours: int = 1) -> bool:
     return age.total_seconds() < (max_hours * 3600)
 
 
+class OpenGraphParser(HTMLParser):
+    def __init__(self):
+        super().__init__()
+        self.image_url = None
+
+    def handle_starttag(self, tag: str, attrs: List[tuple[str, Optional[str]]]) -> None:
+        if self.image_url or tag != "meta":
+            return
+            
+        attrs_dict = dict(attrs)
+        prop = attrs_dict.get("property") or attrs_dict.get("name")
+        
+        if prop in ("og:image", "twitter:image"):
+            self.image_url = attrs_dict.get("content")
+
+
 def extract_og_image(url: str) -> Optional[str]:
     try:
         html = fetch_url(url, timeout=8)[:120000].decode("utf-8", errors="ignore")
-        patterns = [
-            r'<meta[^>]*property=["\']og:image["\'][^>]*content=["\'](https?://[^"\']+)["\']',
-            r'<meta[^>]*content=["\'](https?://[^"\']+)["\'][^>]*property=["\']og:image["\']',
-            r'<meta[^>]*name=["\']twitter:image["\'][^>]*content=["\'](https?://[^"\']+)["\']',
-        ]
-        for pattern in patterns:
-            match = re.search(pattern, html, re.IGNORECASE)
-            if match:
-                return match.group(1)
+        parser = OpenGraphParser()
+        parser.feed(html)
+        return parser.image_url
     except Exception:
         return None
-    return None
 
 
 def escape_html(text: str) -> str:
