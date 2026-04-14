@@ -54,36 +54,39 @@ def fetch_rss(url: str, max_items: int = 10) -> List[Dict[str, str]]:
     raw = fetch_url(url)
     root = XmlElementTree.fromstring(raw)
 
-    items = root.findall(".//item")
-    if not items:
-        entries = root.findall(".//{http://www.w3.org/2005/Atom}entry")
-        for entry in entries[:max_items]:
-            title = (entry.findtext("{http://www.w3.org/2005/Atom}title", "") or "").strip()
-            link_el = entry.find("{http://www.w3.org/2005/Atom}link")
-            link = (link_el.attrib.get("href", "") if link_el is not None else "").strip()
-            desc = (entry.findtext("{http://www.w3.org/2005/Atom}summary", "") or "").strip()
-            pub = (entry.findtext("{http://www.w3.org/2005/Atom}updated", "") or "").strip()
-            if title and link:
-                stories.append({
+    def add_story(title: str, link: str, desc: str, pub: str) -> None:
+        if title and link:
+            stories.append(
+                {
                     "title": unescape(title),
                     "url": link,
                     "desc": strip_html(desc)[:200],
                     "pub": pub,
-                })
-        return stories
+                }
+            )
 
-    for item in items[:max_items]:
-        title = (item.findtext("title", "") or "").strip()
-        link = (item.findtext("link", "") or "").strip()
-        desc = (item.findtext("description", "") or "").strip()
-        pub = (item.findtext("pubDate", "") or item.findtext("published", "") or "").strip()
-        if title and link:
-            stories.append({
-                "title": unescape(title),
-                "url": link,
-                "desc": strip_html(desc)[:200],
-                "pub": pub,
-            })
+    items = root.findall(".//item")
+    if items:
+        for item in items[:max_items]:
+            add_story(
+                (item.findtext("title", "") or "").strip(),
+                (item.findtext("link", "") or "").strip(),
+                (item.findtext("description", "") or "").strip(),
+                (
+                    item.findtext("pubDate", "") or item.findtext("published", "") or ""
+                ).strip(),
+            )
+    else:
+        atom = "{http://www.w3.org/2005/Atom}"
+        for entry in root.findall(f".//{atom}entry")[:max_items]:
+            link_el = entry.find(f"{atom}link")
+            add_story(
+                (entry.findtext(f"{atom}title", "") or "").strip(),
+                (link_el.attrib.get("href", "") if link_el is not None else "").strip(),
+                (entry.findtext(f"{atom}summary", "") or "").strip(),
+                (entry.findtext(f"{atom}updated", "") or "").strip(),
+            )
+
     return stories
 
 
@@ -136,10 +139,10 @@ class OpenGraphParser(HTMLParser):
     def handle_starttag(self, tag: str, attrs: List[tuple[str, Optional[str]]]) -> None:
         if self.image_url or tag != "meta":
             return
-            
+
         attrs_dict = dict(attrs)
         prop = attrs_dict.get("property") or attrs_dict.get("name")
-        
+
         if prop in ("og:image", "twitter:image"):
             self.image_url = attrs_dict.get("content")
 
@@ -155,11 +158,7 @@ def extract_og_image(url: str) -> Optional[str]:
 
 
 def escape_html(text: str) -> str:
-    return (
-        text.replace("&", "&amp;")
-        .replace("<", "&lt;")
-        .replace(">", "&gt;")
-    )
+    return text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
 
 
 def build_message(story: Dict[str, str], source_name: str) -> str:
@@ -176,7 +175,9 @@ def build_message(story: Dict[str, str], source_name: str) -> str:
     return "\n\n".join(parts)
 
 
-def telegram_request(token: str, method: str, payload: Dict[str, Any]) -> Dict[str, Any]:
+def telegram_request(
+    token: str, method: str, payload: Dict[str, Any]
+) -> Dict[str, Any]:
     data = json.dumps(payload).encode("utf-8")
     url = f"https://api.telegram.org/bot{token}/{method}"
     req = urllib.request.Request(
@@ -188,7 +189,9 @@ def telegram_request(token: str, method: str, payload: Dict[str, Any]) -> Dict[s
         return json.loads(resp.read().decode("utf-8"))
 
 
-def post_to_telegram(token: str, channel: str, text: str, image_url: Optional[str] = None) -> bool:
+def post_to_telegram(
+    token: str, channel: str, text: str, image_url: Optional[str] = None
+) -> bool:
     payload: Dict[str, Any]
     method: str
 
@@ -215,19 +218,25 @@ def post_to_telegram(token: str, channel: str, text: str, image_url: Optional[st
     except Exception:
         if image_url:
             try:
-                resp = telegram_request(token, "sendMessage", {
-                    "chat_id": channel,
-                    "text": text[:4096],
-                    "parse_mode": "HTML",
-                    "disable_web_page_preview": False,
-                })
+                resp = telegram_request(
+                    token,
+                    "sendMessage",
+                    {
+                        "chat_id": channel,
+                        "text": text[:4096],
+                        "parse_mode": "HTML",
+                        "disable_web_page_preview": False,
+                    },
+                )
                 return bool(resp.get("ok", False))
             except Exception:
                 return False
         return False
 
 
-def is_near_duplicate(new_title: str, existing_titles: List[str], threshold: float = 0.7) -> bool:
+def is_near_duplicate(
+    new_title: str, existing_titles: List[str], threshold: float = 0.7
+) -> bool:
     words_new = set(re.findall(r"\w+", new_title.lower()))
     if not words_new:
         return False
@@ -253,7 +262,9 @@ def main() -> int:
     base_dir = os.path.dirname(os.path.abspath(__file__))
     config_path = os.path.join(base_dir, "config.json")
     if not os.path.exists(config_path):
-        print("missing config.json; copy config.example.json to config.json and edit it")
+        print(
+            "missing config.json; copy config.example.json to config.json and edit it"
+        )
         return 1
 
     config = load_json(config_path, {})
@@ -264,7 +275,7 @@ def main() -> int:
     max_age_hours = int(config.get("max_post_age_hours", 123123))
     exclude_pattern = config.get("exclude_pattern", "")
     state_path = os.path.join(base_dir, config.get("state_file", "state.json"))
-    log_file = os.path.join(base_dir, config.get("log_file", "news_bot.log"))
+    log_file = os.path.join(base_dir, config.get("log_file", "news.log"))
 
     if not token or not channel or not feeds:
         print("config.json is missing telegram_token, telegram_channel, or feeds")
