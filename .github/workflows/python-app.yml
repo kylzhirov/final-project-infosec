@@ -18,4 +18,7 @@ jobs:
           python-version: ${{ matrix.python-version }}
       # You can test your matrix by printing the current Python version
       - name: Display Python version
-        run: python -m py_compile main.py
+        run: python -c "import sys; print(sys.version)"
+      - name: Compile the Project
+        run: python -m py_compile "news_scraper/main.py"
+
