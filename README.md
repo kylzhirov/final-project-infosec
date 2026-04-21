@@ -15,7 +15,7 @@
 Add feeds, for example:
 ```json
   {
-    "name": "Example Title",
+    "name": "Example",
     "url": "https://example.org/rss.xml"
   }
 ```
