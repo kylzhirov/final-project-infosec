@@ -12,7 +12,7 @@
 ```
 *for private channels the channel id should start from "-100*CHANNEL_ID"
 
-Add feeds, for example:
+Add feeds, for instance:
 ```json
   {
     "name": "Example",
