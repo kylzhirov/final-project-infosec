@@ -145,7 +145,7 @@ def parse_date(pub_date_str: str) -> Optional[datetime]:
     return None
 
 
-def is_fresh(pub_date_str: str, max_hours: int = 1) -> bool:
+def is_fresh(pub_date_str: str, max_hours: int) -> bool:
     dt = parse_date(pub_date_str)
     if dt is None:
         return True
@@ -288,8 +288,8 @@ def main() -> int:
     channel = config.get("telegram_channel", "").strip()
     feeds = config.get("feeds", [])
     max_items = int(config.get("max_items_per_feed", 10))
-    # max_age_hours = int(config.get("max_post_age_hours", 123123))
-    # exclude_pattern = config.get("exclude_pattern", "")
+    max_age_hours = int(config.get("max_post_age_hours", 200))
+    exclude_pattern = config.get("exclude_pattern", "")
     state_path = os.path.join(base_dir, config.get("state_file", "state.json"))
     log_file = os.path.join(base_dir, config.get("log_file", "news.log"))
 
@@ -297,7 +297,7 @@ def main() -> int:
         print("config.json is missing telegram_token, telegram_channel, or feeds")
         return 1
 
-    # exclude_re = re.compile(exclude_pattern, re.IGNORECASE) if exclude_pattern else None
+    exclude_re = re.compile(exclude_pattern, re.IGNORECASE) if exclude_pattern else None
     state = load_json(state_path, {"posted": {}})
     posted = state.get("posted", {})
 
@@ -315,27 +315,27 @@ def main() -> int:
             log(f"failed loading {name}: {e}", log_file)
 
     new_stories: List[Dict[str, str]] = []
-    # seen_titles: List[str] = [v.get("title", "") for v in posted.values()]
+    seen_titles: List[str] = [v.get("title", "") for v in posted.values()]
 
     for story in all_stories:
         title = story["title"]
 
-        # if exclude_re and exclude_re.search(title):
-        #     print("skip exclude:", title)
-        #     continue
-        #
-        # if not is_fresh(story.get("pub", ""), max_age_hours):
-        #     print("skip stale:", title, "| pub:", story.get("pub", ""))
-        #     continue
+        if exclude_re and exclude_re.search(title):
+            print("skip exclude:", title)
+            continue
 
-        # h = story_hash(title)
-        # if h in posted:
-        #     print("skip posted:", title)
-        #     continue
+        if not is_fresh(story.get("pub", ""), max_age_hours):
+            print("skip stale:", title, "| pub:", story.get("pub", ""))
+            continue
 
-        # if is_near_duplicate(title, seen_titles):
-        #     print("skip dup:", title)
-        #     continue
+        h = story_hash(title)
+        if h in posted:
+            print("skip posted:", title)
+            continue
+
+        if is_near_duplicate(title, seen_titles):
+            print("skip dup:", title)
+            continue
 
         print("keep:", title)
         new_stories.append(story)
@@ -355,12 +355,13 @@ def main() -> int:
         if ok:
             posted_now += 1
             log(f"posted: {story['title']}", log_file)
+            posted[story_hash(story["title"])] = story
+            state["posted"] = posted
+            save_json(state_path, state)
         else:
             log(f"failed to post: {story['title']}", log_file)
         time.sleep(2)
 
-    state["posted"] = posted
-    save_json(state_path, state)
     log(f"done; posted {posted_now} stories", log_file)
     return 0
 
