@@ -10,7 +10,7 @@
 "telegram_token": "BOT_TELEGRAM_TOKEN"
 "telegram_channel": "CHANNEL_ID",
 ```
-*for private channels the channel id should start from "-100*CHANNEL_ID*"*
+*for private channels the channel id should start from "-100*CHANNEL_ID"
 
 Add feeds, for example:
 ```json
